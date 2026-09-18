@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FC2 → IFC2 转换器 · phonopy ⇄ QE</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="site">
+      <div>
+        <h1>FC2 <span>→</span> IFC2 转换器</h1>
+        <div class="sub">
+          将 phonopy / 有限差分的超胞二阶力常数（FORCE_CONSTANTS_2ND）
+          约化为 Quantum ESPRESSO DFPT 实空间力常数（ifc2 / .fc）格式。
+        </div>
+      </div>
+      <div class="badge">Ry/bohr² · basis-outer · Hermiticity 自检</div>
+    </header>
+
+    <section class="theory">
+      <h2>转换逻辑（物理）</h2>
+      <p>
+        <strong>FC2</strong>（phonopy 文本格式）存的是<strong>超胞原子对</strong>之间的 3×3 力常数矩阵
+        <code>Φ<sub>αβ</sub>(I, J)</code>，共 <code>N×N</code> 块，单位通常为
+        <code>eV/Å²</code>。<strong>IFC2</strong>（QE q2r / matdyn 的 <code>.fc</code>）存的是
+        <strong>原胞基元原子</strong>在格矢 <code>R</code> 上的力常数
+        <code>Φ<sub>αβ</sub>(κ, κ′; R)</code>，单位为 <code>Ry/bohr²</code>。
+      </p>
+      <p>
+        转换的物理本质是<strong>晶体平移对称性约化</strong>：把超胞中每一对原子
+        分解为「基元指标 + 胞平移」，再按格矢归并。对基元原子 κ 固定在原点胞、
+        κ′ 位于胞 R 的情形，有
+      </p>
+      <div class="formula">Φ<sub>αβ</sub>(κ, κ′; R) = Φ<sub>αβ</sub>( 超胞原子(0,κ), 超胞原子(R,κ′) ) × (eV/Å² → Ry/bohr²)</div>
+      <p>
+        单位换算因子（CODATA）：
+        <code>(1/13.60569) / (1/0.529177)² ≈ 0.020582</code>。
+        无需再乘质量——两种格式都是能量对位移的二阶导，质量在声子求解时才引入。
+      </p>
+      <p>
+        <strong>对称性约束</strong>用于校验与自动识别原子排序，而不是凭空生成数据：
+        Hessian 对称性 <code>Φ<sub>αβ</sub>(κ,κ′;R) = Φ<sub>βα</sub>(κ′,κ;−R)</code>，
+        以及声学和规则 <code>Σ<sub>κ′,R</sub> Φ(κ,κ′;R) = 0</code>。
+        工具会比较两种常见超胞原子排序（basis-outer / cell-outer），取 Hermiticity 误差更小者。
+      </p>
+      <div class="pipeline">
+        <div class="pipe-step">
+          <div class="n">01</div>
+          <div class="t">解析 FC2</div>
+          <div class="d">读入 N×N 的 3×3 矩阵块</div>
+        </div>
+        <div class="pipe-step">
+          <div class="n">02</div>
+          <div class="t">识别超胞</div>
+          <div class="d">由 N/nat 分解 n1×n2×n3</div>
+        </div>
+        <div class="pipe-step">
+          <div class="n">03</div>
+          <div class="t">指标映射</div>
+          <div class="d">(I,J) → (κ,κ′,R) 并检 Hermiticity</div>
+        </div>
+        <div class="pipe-step">
+          <div class="n">04</div>
+          <div class="t">写出 IFC2</div>
+          <div class="d">表头 + 3×3×nat×nat 块，单位换算</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="panel" id="fc2Panel">
+        <h3>① FC2 文件接口</h3>
+        <div class="hint">
+          只接受文件上传（力常数数据量大，不支持粘贴）。
+          格式：首行 <code>N  N</code>，随后每对 <code>i j</code> + 3×3 矩阵。
+        </div>
+        <div class="file-row">
+          <label class="file-btn">
+            选择 FC2 文件
+            <input type="file" id="fc2File" accept=".fc2,.txt,.dat,*" />
+          </label>
+          <span class="file-name" id="fc2FileName">未选择</span>
+        </div>
+        <label class="field-label">文件摘要 / 预览（只读）</label>
+        <textarea id="fc2Meta" readonly placeholder="上传后显示原子数、块数与前几行…"></textarea>
+        <div class="btn-row">
+          <button type="button" class="btn ghost" id="btnLoadSample">载入合成样例 FC2</button>
+          <button type="button" class="btn ghost" id="btnLoadSampleGaN">载入 GaN 表头样例</button>
+        </div>
+      </section>
+
+      <section class="panel" id="headerPanel">
+        <h3>② IFC2 表头接口</h3>
+        <div class="hint">
+          粘贴 QE ifc2 的<strong>表头部分</strong>（含 ntyp/nat/ibrav、物种、原子位置、
+          T 标志、晶格矢量、可选 Z*）。不含 <code>n1 n2 n3</code> 网格行，也不含力常数块。
+        </div>
+        <label class="field-label" for="headerInput">表头文本</label>
+        <textarea id="headerInput" spellcheck="false" placeholder="在此粘贴 ifc2 表头…"></textarea>
+      </section>
+    </div>
+
+    <section class="panel" style="margin-top:16px">
+      <h3>转换选项</h3>
+      <div class="hint">超胞尺寸可留空自动分解；原子排序默认 auto（按 Hermiticity 选择）。</div>
+      <div class="controls">
+        <div>
+          <label class="field-label" for="dimsInput">超胞 n1 n2 n3（空格分隔，空=自动）</label>
+          <input type="text" id="dimsInput" placeholder="例如 4 4 4" />
+        </div>
+        <div>
+          <label class="field-label" for="convSelect">超胞原子排序</label>
+          <select id="convSelect">
+            <option value="auto" selected>auto（推荐）</option>
+            <option value="basis-outer">basis-outer</option>
+            <option value="cell-outer">cell-outer</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label" for="unitFactor">单位因子 eV/Å²→Ry/bohr²</label>
+          <input type="text" id="unitFactor" value="0.020581716639325204" />
+        </div>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="asrCheck" /> 强制声学和规则（ASR）修正对角块</label>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn primary" id="btnConvert" disabled>执行转换</button>
+        <button type="button" class="btn" id="btnDownload" disabled>下载 ifc2 文件</button>
+        <button type="button" class="btn ghost" id="btnClear">清空</button>
+      </div>
+    </section>
+
+    <section class="status" id="statusSection">
+      <h3>转换状态</h3>
+      <div class="kpis" id="kpis">
+        <div class="kpi"><div class="k">超胞原子</div><div class="v" id="kpiN">—</div></div>
+        <div class="kpi"><div class="k">原胞原子 nat</div><div class="v" id="kpiNat">—</div></div>
+        <div class="kpi"><div class="k">超胞尺寸</div><div class="v" id="kpiDims">—</div></div>
+        <div class="kpi"><div class="k">原子排序</div><div class="v" id="kpiConv">—</div></div>
+        <div class="kpi"><div class="k">Hermiticity 误差</div><div class="v" id="kpiHerm">—</div></div>
+        <div class="kpi"><div class="k">最大 |ASR|</div><div class="v" id="kpiAsr">—</div></div>
+        <div class="kpi"><div class="k">输出行数</div><div class="v" id="kpiLines">—</div></div>
+        <div class="kpi"><div class="k">耗时</div><div class="v" id="kpiTime">—</div></div>
+      </div>
+      <div class="log" id="log">等待输入…</div>
+    </section>
+
+    <section class="panel" style="margin-top:16px">
+      <h3>IFC2 输出预览</h3>
+      <div class="hint">完整文件请点「下载 ifc2 文件」。预览仅显示开头若干行。</div>
+      <textarea id="outputPreview" readonly spellcheck="false"></textarea>
+    </section>
+
+    <div class="format-cards">
+      <div class="card">
+        <h3>FC2 文本格式（输入）</h3>
+        <pre>256  256
+1 1
+    17.364676450052734    -0.000000000000000     0.000000000000000
+    -0.000000000000000    17.364676450052695    -0.000000000000001
+     0.000000000000000    -0.000000000000001    17.261008270229340
+1 2
+    ...
+256 256
+    ...（共 N×N 块，单位 eV/Å²）</pre>
+      </div>
+      <div class="card">
+        <h3>IFC2 / .fc 格式（输出）</h3>
+        <pre>  ntyp  nat ibrav  celldm(1:6)
+  物种行 × ntyp
+  原子行 × nat   (τ 以 alat 为单位)
+  T / F
+  晶格矢量 3×3
+  Z*（若 T）：每原子 1 索引行 + 3×3
+  n1  n2  n3
+  a  b  s  s'          ← 笛卡尔 + 基元指标
+  R1 R2 R3  value      ← 64 个格矢，R=0 对应索引 1
+  ...（3×3×nat×nat 块，单位 Ry/bohr²）</pre>
+      </div>
+    </div>
+
+    <footer class="site">
+      本地纯前端计算 · 不上传数据 · 适用于 phonopy FORCE_CONSTANTS / phono3py FORCE_CONSTANTS_2ND → QE ifc2
+    </footer>
+  </div>
+
+  <script src="converter.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
