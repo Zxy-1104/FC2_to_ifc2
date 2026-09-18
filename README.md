@@ -67,6 +67,4 @@ R1 R2 R3  value   # n1×n2×n3 vectors, R=0 → index 1
 - Fair MACE vs phonopy comparison **without** LO–TO: use header `F` (no Born) or disable NAC in matdyn (`loto_disable`) consistently.
 - LO–TO at Γ needs a header with `T` + Z* + ε; that is hybrid (short-range + DFT long-range) if FC2 came from MACE.
 
-## License
-
-No license specified (academic / personal use). Add one if you redistribute.
+中文说明见 [README.zh-CN.md](README.zh-CN.md)。
