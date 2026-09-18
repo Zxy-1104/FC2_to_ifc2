@@ -19,22 +19,32 @@
     if (!Number.isFinite(ntyp) || !Number.isFinite(nat) || nat < 1 || ntyp < 1) {
       throw new Error("无法解析 ntyp/nat");
     }
+    if (lines.length < 1 + ntyp + nat) {
+      throw new Error("表头过短：物种/原子行数不足");
+    }
     let idx = 1 + ntyp + nat;
-    if (idx > lines.length) throw new Error("表头过短：物种/原子行数不足");
+
+    // lrigid flag: T -> ε∞ (3×3) + Born (nat blocks); F -> nothing (ibrav≠0 时无晶格行)
     let flag = null;
     if (idx < lines.length) {
       const f = lines[idx].trim().toUpperCase();
       if (f === "T" || f === "F" || f === ".TRUE." || f === ".FALSE.") {
-        flag = f[0] === "T" || f.startsWith(".T");
+        flag = f === "T" || f.startsWith(".T");
         idx += 1;
       }
     }
-    if (idx + 3 > lines.length) throw new Error("缺少晶格矢量 3 行");
-    idx += 3;
     if (flag === true) {
-      if (idx + nat * 4 > lines.length) throw new Error("Z* 块不完整");
+      // dielectric tensor — NOT lattice vectors; ibrav+celldm already define the cell
+      if (idx + 3 > lines.length) throw new Error("lrigid=T 但缺少介电张量 ε∞ 3 行");
+      idx += 3;
+      if (idx + nat * 4 > lines.length) throw new Error("Z* 块不完整（lrigid=T 时需要）");
       idx += nat * 4;
+    } else if (flag === false) {
+      // QE ifc2 with F: next is n1 n2 n3 (or end of pasted header). Do NOT require lattice.
+    } else {
+      // flag missing — treat as end of header (assume user omitted F / file starts mesh next)
     }
+
     return {
       headerLines: lines.slice(0, idx),
       nat,

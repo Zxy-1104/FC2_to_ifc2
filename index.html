@@ -94,8 +94,10 @@
       <section class="panel" id="headerPanel">
         <h3>② IFC2 表头接口</h3>
         <div class="hint">
-          粘贴 QE ifc2 的<strong>表头部分</strong>（含 ntyp/nat/ibrav、物种、原子位置、
-          T 标志、晶格矢量、可选 Z*）。不含 <code>n1 n2 n3</code> 网格行，也不含力常数块。
+          粘贴 QE ifc2 的<strong>表头部分</strong>（ntyp/nat/ibrav、物种、原子位置、
+          T/F；若 <code>T</code> 则再含 <strong>ε∞ 与 Born Z*</strong>）。
+          <strong>ibrav≠0 不要求晶格矢量</strong>；<code>F</code> 时表头在 T/F 行结束。
+          不含 <code>n1 n2 n3</code> 网格行，也不含力常数块。
         </div>
         <label class="field-label" for="headerInput">表头文本</label>
         <textarea id="headerInput" spellcheck="false" placeholder="在此粘贴 ifc2 表头…"></textarea>
@@ -172,12 +174,13 @@
         <pre>  ntyp  nat ibrav  celldm(1:6)
   物种行 × ntyp
   原子行 × nat   (τ 以 alat 为单位)
-  T / F
-  晶格矢量 3×3
-  Z*（若 T）：每原子 1 索引行 + 3×3
+  T / F                 ← lrigid
+  [若 T] ε∞ 3×3         ← 介电张量，不是晶格
+  [若 T] Z*：nat×(索引+3×3)
+  [ibrav≠0：无晶格行；晶格由 celldm 定义]
   n1  n2  n3
-  a  b  s  s'          ← 笛卡尔 + 基元指标
-  R1 R2 R3  value      ← 64 个格矢，R=0 对应索引 1
+  a  b  s  s'
+  R1 R2 R3  value
   ...（3×3×nat×nat 块，单位 Ry/bohr²）</pre>
       </div>
     </div>

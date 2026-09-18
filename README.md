@@ -55,12 +55,14 @@ ntyp  nat  ibrav  celldm(1:6)
 species lines
 atom lines
 T/F          (lrigid)
-ε∞ 3×3       (if T)
-Z* blocks    (if T)
+ε∞ 3×3       (only if T)   # dielectric, not lattice
+Z* blocks    (only if T)
 n1 n2 n3
-α β κ κ'     # Cartesian + basis indices
-R1 R2 R3  value   # n1×n2×n3 vectors, R=0 → index 1
+α β κ κ'
+R1 R2 R3  value
 ```
+
+When `ibrav ≠ 0`, **no lattice-vector lines** are required — the cell comes from `celldm`. With `F`, the header ends at the `F` line (next is `n1 n2 n3` in a full file).
 
 ## Notes
 
